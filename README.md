@@ -17,9 +17,6 @@ The `fetch-local` build makes use of the images in this repository via a compose
 
 Rebuilding the database container and refreshing (wiping) the database can be achieved with the helper scripts also in `fetch-local`, or from Inventory or Vue apps which also use scripts in `fetch-local`. Using the scripts in Inventory or Vue apps is the best choice, as those will also take care of rebuilding the schema.
 
-<!-- * `./heper.sh build-inventory-db` - Will rebuild the database container.
-* `./helper.sh wipe-inventory-db` - Will rebuild the db container and wipe the data volume. -->
-
 ### Inventory Service Deployed Builds
 Information coming soon...
 
