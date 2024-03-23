@@ -1,4 +1,4 @@
-FROM postgres:15.3 as postgres_build
+FROM postgres:16.2 as postgres_build
 
 ENV POSTGRES_USER=postgres
 ENV POSTGRES_PASSWORD=postgres
@@ -9,8 +9,4 @@ ENV POSTGRES_DB=inventory_service
 
 EXPOSE 5432
 
-VOLUME inventory_service_data:/var/lib/postgresql/data
-
-COPY ../entrypoint.sh /entrypoint.sh
-
-ENTRYPOINT ["/entrypoint.sh"]
+# Named Volume is managed in compose (fetch-local)
