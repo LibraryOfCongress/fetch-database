@@ -4,7 +4,8 @@ ENV POSTGRES_USER=postgres
 ENV POSTGRES_PASSWORD=postgres
 ENV POSTGRES_DB=inventory_service
 
-COPY init.sql /docker-entrypoint-initdb.d/
+# Not needed, yet
+# COPY init.sql /docker-entrypoint-initdb.d/
 
 EXPOSE 5432
 
