@@ -1,0 +1,266 @@
+stages:
+  - build
+  - deploy
+  - reset
+  - controls
+
+build_image_dev:
+  stage: build
+  image:
+    name: git.loc.gov:4567/fetch/build/kaniko-project/executor:1.0.0
+    entrypoint: [""]
+  variables:
+    IMAGE_FULL_TAG: $CI_REGISTRY_IMAGE/dev:latest
+  script:
+    - echo IMAGE_FULL_TAG $IMAGE_FULL_TAG
+    - cp -v inventory/images/inventory.db.dev.Containerfile Dockerfile
+    - /kaniko/executor
+      --context $CI_PROJECT_DIR
+      --dockerfile $CI_PROJECT_DIR/Dockerfile
+      --destination $IMAGE_FULL_TAG
+  when: manual
+
+build_image_test:
+  stage: build
+  image:
+    name: git.loc.gov:4567/fetch/build/kaniko-project/executor:1.0.0
+    entrypoint: [""]
+  variables:
+    IMAGE_FULL_TAG: $CI_REGISTRY_IMAGE/test:latest
+  script:
+    - echo IMAGE_FULL_TAG $IMAGE_FULL_TAG
+    - cp -v inventory/images/inventory.db.test.Containerfile Dockerfile
+    - /kaniko/executor
+      --context $CI_PROJECT_DIR
+      --dockerfile $CI_PROJECT_DIR/Dockerfile
+      --destination $IMAGE_FULL_TAG
+  when: manual
+
+deploy_dev:
+  stage: deploy
+  image:
+    name: git.loc.gov:4567/fetch/build/terraform:alt    # tf image w envsubst added
+    entrypoint: [""]
+  script:
+    # - export TF_VAR_vault_deployer_password=$VAULT_DEPLOYER_PASSWORD_DEV
+    - export TF_VAR_image='git.loc.gov:4567/fetch/database/dev:latest'
+    - export TF_VAR_name='inventory-database'
+    - export TF_VAR_volume_size='1Gi'
+    - export TF_VAR_storage_class_name='nfs-client'
+    - terraform --version
+    - cd terraform
+    - kubectl config use-context fetch/build:fetch -v=6
+    - cp -v $KUBECONFIG kubeconfig
+    - export TF_STATE_NAME=develop
+    - envsubst < backend.hcl.tmpl > backend.hcl
+    - terraform init -backend-config=backend.hcl
+    # - terraform destroy -auto-approve
+    - terraform apply -auto-approve
+  when: manual
+  # rules:
+  #   - if: $CI_COMMIT_BRANCH == 'develop'
+
+reset_dev:
+  stage: reset
+  image:
+    name: git.loc.gov:4567/fetch/build/terraform:alt
+    entrypoint: [""]
+  script:
+    - export TF_VAR_image='git.loc.gov:4567/fetch/database/dev:latest'
+    - export TF_VAR_name='inventory-database'
+    - export TF_VAR_volume_size='1Gi'
+    - export TF_VAR_storage_class_name='nfs-client'
+    - terraform --version
+    - cd terraform
+    - kubectl config use-context fetch/build:fetch -v=6
+    - cp -v $KUBECONFIG kubeconfig
+    - export TF_STATE_NAME=develop
+    - envsubst < backend.hcl.tmpl > backend.hcl
+    - terraform init -backend-config=backend.hcl
+    - terraform destroy -auto-approve
+    - kubectl -n fetch delete pvc -l app=inventory-database
+    - terraform apply -auto-approve
+  when: manual
+  # rules:
+  #   - if: $CI_COMMIT_BRANCH == 'develop'
+
+deploy_test:
+  stage: deploy
+  image:
+    name: git.loc.gov:4567/fetch/build/terraform:alt    # tf image w envsubst added
+    entrypoint: [""]
+  script:
+    - export TF_VAR_image='git.loc.gov:4567/fetch/database/test:latest'
+    - export TF_VAR_name='inventory-database'
+    - export TF_VAR_volume_size='1Gi'
+    - export TF_VAR_storage_class_name='nfs-client'
+    - terraform --version
+    - cd terraform
+    - kubectl config use-context fetch/build:fetch-test -v=6
+    - cp -v $KUBECONFIG kubeconfig
+    - export TF_STATE_NAME=test
+    - envsubst < backend.hcl.tmpl > backend.hcl
+    - terraform init -backend-config=backend.hcl
+    # - terraform destroy -auto-approve
+    - terraform apply -auto-approve
+  when: manual
+  # rules:
+  #   - if: $CI_COMMIT_BRANCH == 'develop'
+
+reset_test:
+  stage: reset
+  image:
+    name: git.loc.gov:4567/fetch/build/terraform:alt
+    entrypoint: [""]
+  script:
+    - export TF_VAR_image='git.loc.gov:4567/fetch/database/test:latest'
+    - export TF_VAR_name='inventory-database'
+    - export TF_VAR_volume_size='1Gi'
+    - export TF_VAR_storage_class_name='nfs-client'
+    - terraform --version
+    - cd terraform
+    - kubectl config use-context fetch/build:fetch-test -v=6
+    - cp -v $KUBECONFIG kubeconfig
+    - export TF_STATE_NAME=test
+    - envsubst < backend.hcl.tmpl > backend.hcl
+    - terraform init -backend-config=backend.hcl
+    - terraform destroy -auto-approve
+    - kubectl -n fetch delete pvc -l app=inventory-database
+    - terraform apply -auto-approve
+  when: manual
+  # rules:
+  #   - if: $CI_COMMIT_BRANCH == 'develop'
+
+stop_dev:
+  stage: controls
+  image:
+    name: git.loc.gov:4567/fetch/build/terraform:alt
+    entrypoint: [""]
+  script:
+    - export TF_VAR_image='git.loc.gov:4567/fetch/database/dev:latest'
+    - export TF_VAR_name='inventory-database'
+    - export TF_VAR_volume_size='1Gi'
+    - export TF_VAR_storage_class_name='nfs-client'
+    - terraform --version
+    - cd terraform
+    - kubectl config use-context fetch/build:fetch -v=6
+    - cp -v $KUBECONFIG kubeconfig
+    - export TF_STATE_NAME=develop
+    - envsubst < backend.hcl.tmpl > backend.hcl
+    - terraform init -backend-config=backend.hcl
+    - terraform destroy -auto-approve
+    - kubectl -n fetch delete pvc -l app=inventory-database
+  when: manual
+  # rules:
+  #   - if: $CI_COMMIT_BRANCH == 'develop'
+
+start_dev:
+  stage: controls
+  image:
+    name: git.loc.gov:4567/fetch/build/terraform:alt
+    entrypoint: [""]
+  script:
+    - export TF_VAR_image='git.loc.gov:4567/fetch/database/dev:latest'
+    - export TF_VAR_name='inventory-database'
+    - export TF_VAR_volume_size='1Gi'
+    - export TF_VAR_storage_class_name='nfs-client'
+    - terraform --version
+    - cd terraform
+    - kubectl config use-context fetch/build:fetch -v=6
+    - cp -v $KUBECONFIG kubeconfig
+    - export TF_STATE_NAME=develop
+    - envsubst < backend.hcl.tmpl > backend.hcl
+    - terraform init -backend-config=backend.hcl
+    - terraform apply -auto-approve
+  when: manual
+  # rules:
+  #   - if: $CI_COMMIT_BRANCH == 'develop'
+
+view_dev:
+  stage: controls
+  image:
+    name: git.loc.gov:4567/fetch/build/terraform:alt
+    entrypoint: [""]
+  script:
+    - export TF_VAR_image='git.loc.gov:4567/fetch/database/dev:latest'
+    - export TF_VAR_name='inventory-database'
+    - export TF_VAR_volume_size='1Gi'
+    - export TF_VAR_storage_class_name='nfs-client'
+    - terraform --version
+    - cd terraform
+    - kubectl config use-context fetch/build:fetch -v=6
+    - cp -v $KUBECONFIG kubeconfig
+    - kubectl -n fetch get pods -o wide
+    - kubectl -n fetch get statefulsets -o wide
+    - kubectl -n fetch get deployments -o wide
+    - kubectl -n fetch get services -o wide
+  when: manual
+  # rules:
+  #   - if: $CI_COMMIT_BRANCH == 'develop'
+
+stop_test:
+  stage: controls
+  image:
+    name: git.loc.gov:4567/fetch/build/terraform:alt
+    entrypoint: [""]
+  script:
+    - export TF_VAR_image='git.loc.gov:4567/fetch/database/test:latest'
+    - export TF_VAR_name='inventory-database'
+    - export TF_VAR_volume_size='1Gi'
+    - export TF_VAR_storage_class_name='nfs-client'
+    - terraform --version
+    - cd terraform
+    - kubectl config use-context fetch/build:fetch-test -v=6
+    - cp -v $KUBECONFIG kubeconfig
+    - export TF_STATE_NAME=test
+    - envsubst < backend.hcl.tmpl > backend.hcl
+    - terraform init -backend-config=backend.hcl
+    - terraform destroy -auto-approve
+    - kubectl -n fetch delete pvc -l app=inventory-database
+  when: manual
+  # rules:
+  #   - if: $CI_COMMIT_BRANCH == 'develop'
+
+start_test:
+  stage: controls
+  image:
+    name: git.loc.gov:4567/fetch/build/terraform:alt
+    entrypoint: [""]
+  script:
+    - export TF_VAR_image='git.loc.gov:4567/fetch/database/test:latest'
+    - export TF_VAR_name='inventory-database'
+    - export TF_VAR_volume_size='1Gi'
+    - export TF_VAR_storage_class_name='nfs-client'
+    - terraform --version
+    - cd terraform
+    - kubectl config use-context fetch/build:fetch-test -v=6
+    - cp -v $KUBECONFIG kubeconfig
+    - export TF_STATE_NAME=test
+    - envsubst < backend.hcl.tmpl > backend.hcl
+    - terraform init -backend-config=backend.hcl
+    - terraform apply -auto-approve
+  when: manual
+  # rules:
+  #   - if: $CI_COMMIT_BRANCH == 'develop'
+
+view_test:
+  stage: controls
+  image:
+    name: git.loc.gov:4567/fetch/build/terraform:alt
+    entrypoint: [""]
+  script:
+    - export TF_VAR_image='git.loc.gov:4567/fetch/database/test:latest'
+    - export TF_VAR_name='inventory-database'
+    - export TF_VAR_volume_size='1Gi'
+    - export TF_VAR_storage_class_name='nfs-client'
+    - terraform --version
+    - cd terraform
+    - kubectl config use-context fetch/build:fetch-test -v=6
+    - cp -v $KUBECONFIG kubeconfig
+    - kubectl -n fetch get pods -o wide
+    - kubectl -n fetch get statefulsets -o wide
+    - kubectl -n fetch get deployments -o wide
+    - kubectl -n fetch get services -o wide
+  when: manual
+  # rules:
+  #   - if: $CI_COMMIT_BRANCH == 'develop'
