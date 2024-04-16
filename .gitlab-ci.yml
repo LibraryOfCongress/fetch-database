@@ -86,8 +86,6 @@ reset_dev:
     # set seeding to false, triggers new pods
     - kubectl -n fetch set env deployment/inventory-service SEED_FAKE_DATA=false
   when: manual
-  # rules:
-  #   - if: $CI_COMMIT_BRANCH == 'develop'
 
 deploy_test:
   stage: deploy
@@ -109,8 +107,6 @@ deploy_test:
     # - terraform destroy -auto-approve
     - terraform apply -auto-approve
   when: manual
-  # rules:
-  #   - if: $CI_COMMIT_BRANCH == 'develop'
 
 reset_test:
   stage: reset
@@ -118,23 +114,26 @@ reset_test:
     name: git.loc.gov:4567/fetch/build/terraform:alt
     entrypoint: [""]
   script:
-    - export TF_VAR_image='git.loc.gov:4567/fetch/database/test:latest'
-    - export TF_VAR_name='inventory-database'
-    - export TF_VAR_volume_size='1Gi'
-    - export TF_VAR_storage_class_name='nfs-client'
-    - terraform --version
-    - cd terraform
     - kubectl config use-context fetch/build:fetch-test -v=6
-    - cp -v $KUBECONFIG kubeconfig
-    - export TF_STATE_NAME=test
-    - envsubst < backend.hcl.tmpl > backend.hcl
-    - terraform init -backend-config=backend.hcl
-    - terraform destroy -auto-approve
+    # scale down inventory-service
+    - kubectl -n fetch scale deployment inventory-service --replicas=0
+    # scale down inventory-database
+    - kubectl -n fetch scale statefulset inventory-database --replicas=0
+    # delete pg disk
     - kubectl -n fetch delete pvc -l app=inventory-database
-    - terraform apply -auto-approve
+    # restart blank db
+    - kubectl -n fetch scale statefulset inventory-database --replicas=1
+    # add env to inventory-service deployment to seed data
+    - kubectl -n fetch set env deployment/inventory-service SEED_FAKE_DATA=true
+    # sleep for db restart
+    - sleep 30
+    # scale up inventory-service
+    - kubectl -n fetch scale deployment inventory-service --replicas=1
+    # sleep while data seeds
+    - sleep 600
+    # set seeding to false, triggers new pods
+    - kubectl -n fetch set env deployment/inventory-service SEED_FAKE_DATA=false
   when: manual
-  # rules:
-  #   - if: $CI_COMMIT_BRANCH == 'develop'
 
 stop_dev:
   stage: controls
