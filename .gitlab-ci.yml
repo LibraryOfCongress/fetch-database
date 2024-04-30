@@ -36,6 +36,21 @@ build_image_test:
       --destination $IMAGE_FULL_TAG
   when: manual
 
+build_image_stage:
+  stage: build
+  tags:
+    - stage-shell
+  before_script:
+    - docker info
+  variables:
+    IMAGE_FULL_TAG: $REGISTRY_STAGE/database/stage:latest
+  script:
+    - echo IMAGE_FULL_TAG $IMAGE_FULL_TAG
+    - cp -v inventory/images/inventory.db.test.Containerfile Dockerfile
+    - docker build -t $IMAGE_FULL_TAG .
+    - docker push $IMAGE_FULL_TAG
+  when: manual
+
 deploy_dev:
   stage: deploy
   image:
