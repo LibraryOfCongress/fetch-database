@@ -145,6 +145,27 @@ reset_test:
     - kubectl -n fetch set env deployment/inventory-service SEED_FAKE_DATA=false
   when: manual
 
+deploy_stage:
+  stage: deploy
+  tags:
+    - stage
+  image:
+    name: $REGISTRY_STAGE/utils/terraform:alt
+    entrypoint: [""]
+  script:
+    - export TF_VAR_image="${REGISTRY_STAGE}/database/stage:latest"
+    - export TF_VAR_name='inventory-database'
+    - export TF_VAR_volume_size='1Gi'
+    - export TF_VAR_storage_class_name='nfs-client'
+    - terraform --version
+    - cd terraform
+    - cp -v $FETCH_DEPLOYER_K8S_CONFIG_STAGE kubeconfig
+    - export TF_STATE_NAME=stage
+    - envsubst < backend.hcl.tmpl > backend.hcl
+    - terraform init -backend-config=backend.hcl
+    - terraform apply -auto-approve
+  when: manual
+
 stop_dev:
   stage: controls
   image:
