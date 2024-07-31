@@ -93,7 +93,7 @@ reset_dev:
     # scale up inventory-service
     - kubectl -n fetch scale deployment inventory-service --replicas=1
     # sleep while data seeds
-    - sleep 600
+    - sleep 480
     # set seeding to false, triggers new pods
     - kubectl -n fetch set env deployment/inventory-service SEED_FAKE_DATA=false
   when: manual
@@ -140,7 +140,7 @@ reset_test:
     # scale up inventory-service
     - kubectl -n fetch scale deployment inventory-service --replicas=1
     # sleep while data seeds
-    - sleep 600
+    - sleep 480
     # set seeding to false, triggers new pods
     - kubectl -n fetch set env deployment/inventory-service SEED_FAKE_DATA=false
   when: manual
@@ -164,6 +164,35 @@ deploy_stage:
     - envsubst < backend.hcl.tmpl > backend.hcl
     - terraform init -backend-config=backend.hcl
     - terraform apply -auto-approve
+  when: manual
+
+reset_stage:
+  stage: reset
+  tags:
+    - stage
+  image:
+    name: $REGISTRY_STAGE/utils/terraform:alt
+    entrypoint: [""]
+  script:
+    - export KUBECONFIG=$FETCH_DEPLOYER_K8S_CONFIG_STAGE
+    # scale down inventory-service
+    - kubectl -n fetch scale deployment inventory-service --replicas=0
+    # scale down inventory-database
+    - kubectl -n fetch scale statefulset inventory-database --replicas=0
+    # delete pg disk
+    - kubectl -n fetch delete pvc -l app=inventory-database
+    # restart blank db
+    - kubectl -n fetch scale statefulset inventory-database --replicas=1
+    # add env to inventory-service deployment to seed data
+    - kubectl -n fetch set env deployment/inventory-service SEED_FAKE_DATA=true
+    # sleep for db restart
+    - sleep 30
+    # scale up inventory-service
+    - kubectl -n fetch scale deployment inventory-service --replicas=1
+    # sleep while data seeds
+    - sleep 480
+    # set seeding to false, triggers new pods
+    - kubectl -n fetch set env deployment/inventory-service SEED_FAKE_DATA=false
   when: manual
 
 stop_dev:
