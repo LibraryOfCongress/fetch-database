@@ -178,23 +178,23 @@ reset_stage:
     - cp -v $KUBECONFIG kubeconfig
     - kubectl get pods -A
     # scale down inventory-service
-    - echo kubectl -n fetch scale deployment inventory-service --replicas=0
+    - kubectl -n fetch scale deployment inventory-service --replicas=0
     # scale down inventory-database
-    - echo kubectl -n fetch scale statefulset inventory-database --replicas=0
+    - kubectl -n fetch scale statefulset inventory-database --replicas=0
     # delete pg disk
-    - echo kubectl -n fetch delete pvc -l app=inventory-database
+    - kubectl -n fetch delete pvc -l app=inventory-database
     # restart blank db
-    - echo kubectl -n fetch scale statefulset inventory-database --replicas=1
+    - kubectl -n fetch scale statefulset inventory-database --replicas=1
     # add env to inventory-service deployment to seed data
-    - echo kubectl -n fetch set env deployment/inventory-service SEED_FAKE_DATA=true
+    - kubectl -n fetch set env deployment/inventory-service SEED_FAKE_DATA=true
     # sleep for db restart
-    - echo sleep 30
+    - sleep 30
     # scale up inventory-service
-    - echo kubectl -n fetch scale deployment inventory-service --replicas=1
+    - kubectl -n fetch scale deployment inventory-service --replicas=1
     # sleep while data seeds
-    - echo sleep 480
+    - sleep 480
     # set seeding to false, triggers new pods
-    - echo kubectl -n fetch set env deployment/inventory-service SEED_FAKE_DATA=false
+    - kubectl -n fetch set env deployment/inventory-service SEED_FAKE_DATA=false
   rules:
     - if: '$CI_COMMIT_TAG =~ /^release-.*$/'
       when: manual
