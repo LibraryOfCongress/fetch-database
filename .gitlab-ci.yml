@@ -149,8 +149,7 @@ deploy_stage:
   stage: deploy
   tags:
     - stage
-  image:
-    name: $REGISTRY_STAGE/utils/terraform:alt
+    name: git.loc.gov:4567/fetch/build/terraform:alt
     entrypoint: [""]
   script:
     - export TF_VAR_image="${REGISTRY_STAGE}/database/stage:latest"
@@ -170,8 +169,7 @@ reset_stage:
   stage: reset
   tags:
     - stage
-  image:
-    name: $REGISTRY_STAGE/utils/terraform:alt
+    name: git.loc.gov:4567/fetch/build/terraform:alt
     entrypoint: [""]
   script:
     - kubectl config use-context fetch/build:fetch-stage -v=6
