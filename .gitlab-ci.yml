@@ -149,6 +149,7 @@ deploy_stage:
   stage: deploy
   tags:
     - stage
+  image:
     name: git.loc.gov:4567/fetch/build/terraform:alt
     entrypoint: [""]
   script:
@@ -169,6 +170,7 @@ reset_stage:
   stage: reset
   tags:
     - stage
+  image:
     name: git.loc.gov:4567/fetch/build/terraform:alt
     entrypoint: [""]
   script:
