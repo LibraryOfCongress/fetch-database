@@ -168,13 +168,14 @@ deploy_stage:
     name: git.loc.gov:4567/fetch/build/terraform:alt
     entrypoint: [""]
   script:
-    - export TF_VAR_image='git.loc.gov:4567/fetch/database/test:latest'
+    - export TF_VAR_image='git.loc.gov:4567/fetch/database/stage:latest'
     - export TF_VAR_name='inventory-database'
     - export TF_VAR_volume_size='1Gi'
     - export TF_VAR_storage_class_name='nfs-client'
     - terraform --version
     - cd terraform
     - kubectl config use-context fetch/build:fetch-stage -v=6
+    - cp -v $KUBECONFIG kubeconfig
     - export TF_STATE_NAME=stage
     - envsubst < backend.hcl.tmpl > backend.hcl
     - terraform init -backend-config=backend.hcl
@@ -221,13 +222,14 @@ deploy_prod:
     name: git.loc.gov:4567/fetch/build/terraform:alt
     entrypoint: [""]
   script:
-    - export TF_VAR_image="${REGISTRY_STAGE}/database/prod:latest"
+    - export TF_VAR_image='git.loc.gov:4567/fetch/database/prod:latest'
     - export TF_VAR_name='inventory-database'
     - export TF_VAR_volume_size='1Gi'
     - export TF_VAR_storage_class_name='nfs-client'
     - terraform --version
     - cd terraform
     - kubectl config use-context fetch/build:fetch-prod -v=6
+    - cp -v $KUBECONFIG kubeconfig
     - export TF_STATE_NAME=prod
     - envsubst < backend.hcl.tmpl > backend.hcl
     - terraform init -backend-config=backend.hcl
