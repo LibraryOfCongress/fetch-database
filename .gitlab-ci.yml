@@ -38,17 +38,34 @@ build_image_test:
 
 build_image_stage:
   stage: build
-  tags:
-    - stage-shell
-  before_script:
-    - docker info
+  image:
+    name: git.loc.gov:4567/fetch/build/kaniko-project/executor:1.0.0
+    entrypoint: [""]
   variables:
-    IMAGE_FULL_TAG: $REGISTRY_STAGE/database/stage:latest
+    IMAGE_FULL_TAG: $CI_REGISTRY_IMAGE/stage:latest
   script:
     - echo IMAGE_FULL_TAG $IMAGE_FULL_TAG
-    - cp -v inventory/images/inventory.db.test.Containerfile Dockerfile
-    - docker build -t $IMAGE_FULL_TAG .
-    - docker push $IMAGE_FULL_TAG
+    - cp -v inventory/images/inventory.db.stage.Containerfile Dockerfile
+    - /kaniko/executor
+      --context $CI_PROJECT_DIR
+      --dockerfile $CI_PROJECT_DIR/Dockerfile
+      --destination $IMAGE_FULL_TAG
+  when: manual
+
+build_image_prod:
+  stage: build
+  image:
+    name: git.loc.gov:4567/fetch/build/kaniko-project/executor:1.0.0
+    entrypoint: [""]
+  variables:
+    IMAGE_FULL_TAG: $CI_REGISTRY_IMAGE/prod:latest
+  script:
+    - echo IMAGE_FULL_TAG $IMAGE_FULL_TAG
+    - cp -v inventory/images/inventory.db.prod.Containerfile Dockerfile
+    - /kaniko/executor
+      --context $CI_PROJECT_DIR
+      --dockerfile $CI_PROJECT_DIR/Dockerfile
+      --destination $IMAGE_FULL_TAG
   when: manual
 
 deploy_dev:
