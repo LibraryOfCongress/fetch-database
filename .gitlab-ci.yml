@@ -1,0 +1,310 @@
+stages:
+  - build
+  - deploy
+  - reset
+  - controls
+
+build_image_dev:
+  stage: build
+  image:
+    name: git.example.com:4567/fetch/build/kaniko-project/executor:1.0.0
+    entrypoint: [""]
+  variables:
+    IMAGE_FULL_TAG: $CI_REGISTRY_IMAGE/dev:latest
+  script:
+    - echo IMAGE_FULL_TAG $IMAGE_FULL_TAG
+    - cp -v inventory/images/inventory.db.dev.Containerfile Dockerfile
+    - /kaniko/executor
+      --context $CI_PROJECT_DIR
+      --dockerfile $CI_PROJECT_DIR/Dockerfile
+      --destination $IMAGE_FULL_TAG
+  when: manual
+
+build_image_test:
+  stage: build
+  image:
+    name: git.example.com:4567/fetch/build/kaniko-project/executor:1.0.0
+    entrypoint: [""]
+  variables:
+    IMAGE_FULL_TAG: $CI_REGISTRY_IMAGE/test:latest
+  script:
+    - echo IMAGE_FULL_TAG $IMAGE_FULL_TAG
+    - cp -v inventory/images/inventory.db.test.Containerfile Dockerfile
+    - /kaniko/executor
+      --context $CI_PROJECT_DIR
+      --dockerfile $CI_PROJECT_DIR/Dockerfile
+      --destination $IMAGE_FULL_TAG
+  when: manual
+
+build_image_stage:
+  stage: build
+  tags:
+    - stage-shell
+  before_script:
+    - docker info
+  variables:
+    IMAGE_FULL_TAG: $REGISTRY_STAGE/database/stage:latest
+  script:
+    - echo IMAGE_FULL_TAG $IMAGE_FULL_TAG
+    - cp -v inventory/images/inventory.db.test.Containerfile Dockerfile
+    - docker build -t $IMAGE_FULL_TAG .
+    - docker push $IMAGE_FULL_TAG
+  when: manual
+
+deploy_dev:
+  stage: deploy
+  image:
+    name: git.example.com:4567/fetch/build/terraform:alt
+    entrypoint: [""]
+  script:
+    - export TF_VAR_image='git.example.com:4567/fetch/database/dev:latest'
+    - export TF_VAR_name='inventory-database'
+    - export TF_VAR_volume_size='1Gi'
+    - export TF_VAR_storage_class_name='nfs-client'
+    - terraform --version
+    - cd terraform
+    - kubectl config use-context fetch/build:fetch -v=6
+    - cp -v $KUBECONFIG kubeconfig
+    - export TF_STATE_NAME=develop
+    - envsubst < backend.hcl.tmpl > backend.hcl
+    - terraform init -backend-config=backend.hcl
+    - terraform apply -auto-approve
+  when: manual
+
+reset_dev:
+  stage: reset
+  image:
+    name: git.example.com:4567/fetch/build/terraform:alt
+    entrypoint: [""]
+  script:
+    - kubectl config use-context fetch/build:fetch -v=6
+    # scale down inventory-service
+    - kubectl -n fetch scale deployment inventory-service --replicas=0
+    # scale down inventory-database
+    - kubectl -n fetch scale statefulset inventory-database --replicas=0
+    # delete pg disk
+    - kubectl -n fetch delete pvc -l app=inventory-database
+    # restart blank db
+    - kubectl -n fetch scale statefulset inventory-database --replicas=1
+    # add env to inventory-service deployment to seed data
+    - kubectl -n fetch set env deployment/inventory-service SEED_FAKE_DATA=true
+    # sleep for db restart
+    - sleep 30
+    # scale up inventory-service
+    - kubectl -n fetch scale deployment inventory-service --replicas=1
+    # sleep while data seeds
+    - sleep 480
+    # set seeding to false, triggers new pods
+    - kubectl -n fetch set env deployment/inventory-service SEED_FAKE_DATA=false
+  when: manual
+
+deploy_test:
+  stage: deploy
+  image:
+    name: git.example.com:4567/fetch/build/terraform:alt
+    entrypoint: [""]
+  script:
+    - export TF_VAR_image='git.example.com:4567/fetch/database/test:latest'
+    - export TF_VAR_name='inventory-database'
+    - export TF_VAR_volume_size='1Gi'
+    - export TF_VAR_storage_class_name='nfs-client'
+    - terraform --version
+    - cd terraform
+    - kubectl config use-context fetch/build:fetch-test -v=6
+    - cp -v $KUBECONFIG kubeconfig
+    - export TF_STATE_NAME=test
+    - envsubst < backend.hcl.tmpl > backend.hcl
+    - terraform init -backend-config=backend.hcl
+    - terraform apply -auto-approve
+  when: manual
+
+reset_test:
+  stage: reset
+  image:
+    name: git.example.com:4567/fetch/build/terraform:alt
+    entrypoint: [""]
+  script:
+    - kubectl config use-context fetch/build:fetch-test -v=6
+    # scale down inventory-service
+    - kubectl -n fetch scale deployment inventory-service --replicas=0
+    # scale down inventory-database
+    - kubectl -n fetch scale statefulset inventory-database --replicas=0
+    # delete pg disk
+    - kubectl -n fetch delete pvc -l app=inventory-database
+    # restart blank db
+    - kubectl -n fetch scale statefulset inventory-database --replicas=1
+    # add env to inventory-service deployment to seed data
+    - kubectl -n fetch set env deployment/inventory-service SEED_FAKE_DATA=true
+    # sleep for db restart
+    - sleep 30
+    # scale up inventory-service
+    - kubectl -n fetch scale deployment inventory-service --replicas=1
+    # sleep while data seeds
+    - sleep 480
+    # set seeding to false, triggers new pods
+    - kubectl -n fetch set env deployment/inventory-service SEED_FAKE_DATA=false
+  when: manual
+
+deploy_stage:
+  stage: deploy
+  tags:
+    - stage
+  image:
+    name: $REGISTRY_STAGE/utils/terraform:alt
+    entrypoint: [""]
+  script:
+    - export TF_VAR_image="${REGISTRY_STAGE}/database/stage:latest"
+    - export TF_VAR_name='inventory-database'
+    - export TF_VAR_volume_size='1Gi'
+    - export TF_VAR_storage_class_name='nfs-client'
+    - terraform --version
+    - cd terraform
+    - cp -v $FETCH_DEPLOYER_K8S_CONFIG_STAGE kubeconfig
+    - export TF_STATE_NAME=stage
+    - envsubst < backend.hcl.tmpl > backend.hcl
+    - terraform init -backend-config=backend.hcl
+    - terraform apply -auto-approve
+  when: manual
+
+reset_stage:
+  stage: reset
+  tags:
+    - stage
+  image:
+    name: $REGISTRY_STAGE/utils/terraform:alt
+    entrypoint: [""]
+  script:
+    - export KUBECONFIG=$FETCH_DEPLOYER_K8S_CONFIG_STAGE
+    # scale down inventory-service
+    - kubectl -n fetch scale deployment inventory-service --replicas=0
+    # scale down inventory-database
+    - kubectl -n fetch scale statefulset inventory-database --replicas=0
+    # delete pg disk
+    - kubectl -n fetch delete pvc -l app=inventory-database
+    # restart blank db
+    - kubectl -n fetch scale statefulset inventory-database --replicas=1
+    # add env to inventory-service deployment to seed data
+    - kubectl -n fetch set env deployment/inventory-service SEED_FAKE_DATA=true
+    # sleep for db restart
+    - sleep 30
+    # scale up inventory-service
+    - kubectl -n fetch scale deployment inventory-service --replicas=1
+    # sleep while data seeds
+    - sleep 480
+    # set seeding to false, triggers new pods
+    - kubectl -n fetch set env deployment/inventory-service SEED_FAKE_DATA=false
+  when: manual
+
+stop_dev:
+  stage: controls
+  image:
+    name: git.example.com:4567/fetch/build/terraform:alt
+    entrypoint: [""]
+  script:
+    - export TF_VAR_image='git.example.com:4567/fetch/database/dev:latest'
+    - export TF_VAR_name='inventory-database'
+    - export TF_VAR_volume_size='1Gi'
+    - export TF_VAR_storage_class_name='nfs-client'
+    - terraform --version
+    - cd terraform
+    - kubectl config use-context fetch/build:fetch -v=6
+    - cp -v $KUBECONFIG kubeconfig
+    - export TF_STATE_NAME=develop
+    - envsubst < backend.hcl.tmpl > backend.hcl
+    - terraform init -backend-config=backend.hcl
+    - terraform destroy -auto-approve
+    - kubectl -n fetch delete pvc -l app=inventory-database
+  when: manual
+
+start_dev:
+  stage: controls
+  image:
+    name: git.example.com:4567/fetch/build/terraform:alt
+    entrypoint: [""]
+  script:
+    - export TF_VAR_image='git.example.com:4567/fetch/database/dev:latest'
+    - export TF_VAR_name='inventory-database'
+    - export TF_VAR_volume_size='1Gi'
+    - export TF_VAR_storage_class_name='nfs-client'
+    - terraform --version
+    - cd terraform
+    - kubectl config use-context fetch/build:fetch -v=6
+    - cp -v $KUBECONFIG kubeconfig
+    - export TF_STATE_NAME=develop
+    - envsubst < backend.hcl.tmpl > backend.hcl
+    - terraform init -backend-config=backend.hcl
+    - terraform apply -auto-approve
+  when: manual
+
+view_dev:
+  stage: controls
+  image:
+    name: git.example.com:4567/fetch/build/terraform:alt
+    entrypoint: [""]
+  script:
+    - kubectl config use-context fetch/build:fetch -v=6
+    - kubectl -n fetch get sc -o wide
+    - kubectl -n fetch get pv -o wide
+    - kubectl -n fetch get pvc -o wide
+    - kubectl -n fetch get pods -o wide
+    - kubectl -n fetch get statefulsets -o wide
+    - kubectl -n fetch get deployments -o wide
+    - kubectl -n fetch get services -o wide
+  when: manual
+
+stop_test:
+  stage: controls
+  image:
+    name: git.example.com:4567/fetch/build/terraform:alt
+    entrypoint: [""]
+  script:
+    - export TF_VAR_image='git.example.com:4567/fetch/database/test:latest'
+    - export TF_VAR_name='inventory-database'
+    - export TF_VAR_volume_size='1Gi'
+    - export TF_VAR_storage_class_name='nfs-client'
+    - terraform --version
+    - cd terraform
+    - kubectl config use-context fetch/build:fetch-test -v=6
+    - cp -v $KUBECONFIG kubeconfig
+    - export TF_STATE_NAME=test
+    - envsubst < backend.hcl.tmpl > backend.hcl
+    - terraform init -backend-config=backend.hcl
+    - terraform destroy -auto-approve
+    - kubectl -n fetch delete pvc -l app=inventory-database
+  when: manual
+
+start_test:
+  stage: controls
+  image:
+    name: git.example.com:4567/fetch/build/terraform:alt
+    entrypoint: [""]
+  script:
+    - export TF_VAR_image='git.example.com:4567/fetch/database/test:latest'
+    - export TF_VAR_name='inventory-database'
+    - export TF_VAR_volume_size='1Gi'
+    - export TF_VAR_storage_class_name='nfs-client'
+    - terraform --version
+    - cd terraform
+    - kubectl config use-context fetch/build:fetch-test -v=6
+    - cp -v $KUBECONFIG kubeconfig
+    - export TF_STATE_NAME=test
+    - envsubst < backend.hcl.tmpl > backend.hcl
+    - terraform init -backend-config=backend.hcl
+    - terraform apply -auto-approve
+  when: manual
+
+view_test:
+  stage: controls
+  image:
+    name: git.example.com:4567/fetch/build/terraform:alt
+    entrypoint: [""]
+  script:
+    - kubectl config use-context fetch/build:fetch-test -v=6
+    - kubectl -n fetch get sc -o wide
+    - kubectl -n fetch get pv -o wide
+    - kubectl -n fetch get pvc -o wide
+    - kubectl -n fetch get pods -o wide
+    - kubectl -n fetch get statefulsets -o wide
+    - kubectl -n fetch get deployments -o wide
+    - kubectl -n fetch get services -o wide
+  when: manual
